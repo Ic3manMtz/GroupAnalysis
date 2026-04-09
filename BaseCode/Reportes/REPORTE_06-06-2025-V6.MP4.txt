@@ -1,0 +1,12 @@
+REPORTE AUTOMÁTICO - 06-06-2025-V6.MP4
+========================================
+Duración frames: 31660
+Personas únicas: 1420
+Grupos detectados: 432
+
+Top 5 Grupos más duraderos:
+ - Grupo 319: 3637 frames
+ - Grupo 374: 3497 frames
+ - Grupo 299: 2462 frames
+ - Grupo 263: 2333 frames
+ - Grupo 152: 2191 frames

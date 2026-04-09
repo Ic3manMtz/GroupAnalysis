@@ -1,0 +1,12 @@
+REPORTE AUTOMÁTICO - 11-14-2025-V2.mp4
+========================================
+Duración frames: 26337
+Personas únicas: 1036
+Grupos detectados: 374
+
+Top 5 Grupos más duraderos:
+ - Grupo 165: 3400 frames
+ - Grupo 328: 2255 frames
+ - Grupo 238: 2234 frames
+ - Grupo 265: 2132 frames
+ - Grupo 273: 1710 frames

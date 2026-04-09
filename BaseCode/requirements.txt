@@ -1,0 +1,17 @@
+opencv-python
+numpy
+pandas
+scikit-learn
+filterpy
+scikit-image
+matplotlib
+seaborn
+ultralytics
+lap>=0.5.12
+deep-sort-realtime
+ffmpeg-python
+sqlalchemy
+psycopg2-binary
+python-dotenv
+tqdm
+colorama

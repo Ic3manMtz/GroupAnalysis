@@ -1,0 +1,12 @@
+REPORTE AUTOMÁTICO - 05-27-2025-V1.mp4
+========================================
+Duración frames: 32025
+Personas únicas: 1920
+Grupos detectados: 598
+
+Top 5 Grupos más duraderos:
+ - Grupo 317: 5774 frames
+ - Grupo 480: 3854 frames
+ - Grupo 67: 3667 frames
+ - Grupo 152: 3478 frames
+ - Grupo 212: 3073 frames

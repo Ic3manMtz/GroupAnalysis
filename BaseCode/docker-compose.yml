@@ -1,0 +1,92 @@
+version: "3.8"
+
+services:
+  group-analysis:
+    image: nvidia/cuda:12.3.1-base-ubuntu22.04
+    container_name: group-analysis
+    tty: true
+    stdin_open: true
+    # Configuración para acceso a GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./:/app
+      - ../Videos:/app/Videos:cached
+    working_dir: /app
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - PYTHONPATH=/app
+      # Variables de conexión a la base de datos
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=group_analysis_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+    command: >
+      sh -c "
+        apt-get update &&
+        apt-get install -y python3-pip libgl1-mesa-glx libglib2.0-0 postgresql-client &&
+        update-alternatives --install /usr/bin/python python /usr/bin/python3 1 &&
+        pip3 install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121 &&
+        pip3 install --no-cache-dir -r requirements.txt &&
+        echo 'Esperando a que PostgreSQL esté listo...' &&
+        until pg_isready -h postgres -p 5432 -U postgres; do
+            echo 'PostgreSQL no está listo - esperando...'
+            sleep 2
+        done &&
+        echo 'PostgreSQL está listo' &&
+        pip3 install -e . &&
+        python3 /app/src/database/create_models.py &&
+        echo 'Contenedor inicializado correctamente' &&
+        tail -f /dev/null
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - data-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-group-analysis
+    restart: always
+    environment:
+      POSTGRES_DB: group_analysis_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer-group-analysis
+    restart: always
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    networks:
+      - data-network
+
+volumes:
+  postgres_data:
+
+networks:
+  data-network:
+    driver: bridge
