@@ -5,11 +5,15 @@ REMOTE_DIR="/work/jorge/GroupAnalysisApp"
 TMUX_SESSION="ServicioRemote"
 TMUX_WINDOW="main"
 COMMAND="python3 src/main.py"
+CONTAINET="group-analysis"
 
 echo "Haciendo push a Github..."
-git push origin main
+git push origin main || { echo "Error: push falló, abortando despliegue"; exit 1; }
 
-echo "Conectando al servidor y ejecutando el comando..."
-ssh $SERVER "cd $REMOTE_DIR && git pull && cd BaseCode&& tmux send-keys -t ${TMUX_SESSION}:${TMUX_WINDOW} C-c '${COMMAND}' Enter"
+ssh $SERVER "
+    cd $REMOTE_DIR || { echo 'Error: no se pudo acceder a $REMOTE_DIR'; exit 1; }
+    git pull origin main || { echo 'Error: git pull falló'; exit 1; }
+    docker exec $CONTAINER tmux send-keys -t ${TMUX_SESSION}:${TMUX_WINDOW} C-c '$COMMAND' Enter
+"
 
 echo "Despliegue completado."
