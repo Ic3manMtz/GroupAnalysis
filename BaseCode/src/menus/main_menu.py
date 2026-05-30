@@ -26,7 +26,7 @@ class MainMenu:
     @staticmethod
     def display_main_menu(converted_count: Optional[int] = None) -> str:
         print("\n" + "=" * 40)
-        print(" " * 10 + "ANÁLISIS DE VIDEOS prueba".center(20))
+        print(" " * 10 + "ANÁLISIS DE VIDEOS".center(20))
         print("=" * 40 + "\n")
 
         options = MainMenu.MAIN_OPTIONS.copy()
