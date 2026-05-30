@@ -8,13 +8,17 @@ COMMAND="python3 src/main.py"
 CONTAINER="group-analysis"
 
 echo "Haciendo push a Github..."
+sleep 1
 git push origin main || { echo "Error: push falló, abortando despliegue"; exit 1; }
 
 echo "Conectando al servidor, actualizando código y reiniciando proceso en el contenedor..."
+echo ""
+sleep 1
+
 ssh $SERVER "
     cd $REMOTE_DIR || { echo 'Error: no se pudo acceder a $REMOTE_DIR'; exit 1; }
     git pull origin main || { echo 'Error: git pull falló'; exit 1; }
-    docker exec $CONTAINER tmux send-keys -t ${TMUX_SESSION} C-c '$COMMAND' Enter
+    docker exec $CONTAINER tmux send-keys -t ${TMUX_SESSION} C-c Enter '$COMMAND' Enter
 "
 
-echo "Despliegue completado." > test.txt
+echo "Despliegue completado."
