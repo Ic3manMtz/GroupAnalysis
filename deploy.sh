@@ -18,7 +18,10 @@ sleep 1
 ssh $SERVER "
     cd $REMOTE_DIR || { echo 'Error: no se pudo acceder a $REMOTE_DIR'; exit 1; }
     git pull origin main || { echo 'Error: git pull falló'; exit 1; }
-    docker exec $CONTAINER tmux send-keys -t ${TMUX_SESSION} C-c Enter '$COMMAND' Enter
-"
+    
+    bash BaseCode/restart_container.sh || { echo 'Error: no se pudo reiniciar el contenedor'; exit 1; }
+    sleep 2
 
+    docker exec $CONTAINER tmux new-session -d -s $TMUX_SESSION -n $TMUX_WINDOW \"$COMMAND; bash\"
+"
 echo "Despliegue completado."
