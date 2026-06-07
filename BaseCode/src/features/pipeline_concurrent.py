@@ -676,7 +676,7 @@ def main():
     print(f" Pause threshold   : {args.pause_threshold} px/frame")
     print(f"{'='*60}\n")
 
-    model_path = "yolo11x.pt"
+    model_path = "yolo11l.pt"
 
     config = {
         'conf': args.conf,
