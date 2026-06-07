@@ -20,7 +20,8 @@ class MainMenu:
         ("4", "Estadísticas de grupos"),
         ("5", "Visualización de grupos en videos"),
         ("6", "Visualización de videos con detecciones individuales"),
-        ("7", "Volver al menú principal")
+        ("7", "Pipeline concurrente completo (detección + grupos + reporte)"),
+        ("8", "Volver al menú principal")
     ]
 
     @staticmethod
@@ -130,6 +131,43 @@ class MainMenu:
             frames_selected = [frames_analyzed[i - 1] for i in indices if 1 <= i <= len(frames_analyzed)]
 
         return frames_selected
+
+    @staticmethod
+    def display_concurrent_pipeline_params() -> dict:
+        """Solicita los parámetros del pipeline concurrente al usuario"""
+        print("\nParámetros del pipeline concurrente:")
+
+        max_workers = input("  Hilos simultáneos (default: 2): ").strip()
+        max_workers = int(max_workers) if max_workers.isdigit() else 2
+
+        conf = input("  Confianza YOLO (default: 0.25): ").strip()
+        try:
+            conf = float(conf)
+        except ValueError:
+            conf = 0.25
+
+        group_dist = input("  Distancia de agrupamiento en px (default: 100): ").strip()
+        try:
+            group_dist = float(group_dist)
+        except ValueError:
+            group_dist = 100.0
+
+        min_frames = input("  Frames mínimos para confirmar grupo (default: 15): ").strip()
+        min_frames = int(min_frames) if min_frames.isdigit() else 15
+
+        pause_threshold = input("  Umbral de pausa en px/frame (default: 2.0): ").strip()
+        try:
+            pause_threshold = float(pause_threshold)
+        except ValueError:
+            pause_threshold = 2.0
+
+        return {
+            "max_workers":     max_workers,
+            "conf":            conf,
+            "group_dist":      group_dist,
+            "min_frames":      min_frames,
+            "pause_threshold": pause_threshold,
+        }
 
     @staticmethod
     def display_videos_with_groups(videos_with_groups):

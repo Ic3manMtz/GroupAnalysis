@@ -246,6 +246,30 @@ class VideoFunctions:
             session.close()
 
     @staticmethod
+    def run_concurrent_pipeline(
+        input_dir: str,
+        output_dir: str,
+        max_workers: int,
+        conf: float,
+        group_dist: float,
+        min_frames: int,
+        pause_threshold: float
+    ) -> None:
+        """Ejecuta el pipeline concurrente completo (detección + grupos + reporte)"""
+        print("\nIniciando pipeline concurrente...")
+        subprocess.run([
+            "python",
+            "src/features/pipeline_concurrent.py",
+            "--input_dir",        input_dir,
+            "--output_dir",       output_dir,
+            "--max_workers",      str(max_workers),
+            "--conf",             str(conf),
+            "--group_dist",       str(group_dist),
+            "--min_frames",       str(min_frames),
+            "--pause_threshold",  str(pause_threshold),
+        ])
+
+    @staticmethod
     def command_run() -> None:
         """Ejecuta el comando de la CLI para iniciar el procesamiento de videos."""
         subprocess.run([

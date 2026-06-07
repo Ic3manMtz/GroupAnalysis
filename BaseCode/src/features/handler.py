@@ -143,6 +143,24 @@ class Handler:
                 VideoFunctions.reconstruct_video(frames_selected, self.output_folder)
 
             elif choice == '7':
+                print("\n=== PIPELINE CONCURRENTE (Detección + Grupos + Reporte) ===")
+                params = MainMenu.display_concurrent_pipeline_params()
+                output_dir = os.path.join(self.output_folder, "reportes")
+
+                start_time = time.time()
+                VideoFunctions.run_concurrent_pipeline(
+                    input_dir=self.video_folder,
+                    output_dir=output_dir,
+                    max_workers=params["max_workers"],
+                    conf=params["conf"],
+                    group_dist=params["group_dist"],
+                    min_frames=params["min_frames"],
+                    pause_threshold=params["pause_threshold"],
+                )
+                end_time = time.time()
+                print(f"Pipeline completado en: {self.format_time(end_time - start_time)}")
+
+            elif choice == '8':
                 print("Regresar al menu anterior")
                 break
             else:
