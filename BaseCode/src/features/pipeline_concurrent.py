@@ -67,6 +67,9 @@ class GroupTracker:
         # Acumulado de frames en pausa por grupo
         self.group_pause_frames = defaultdict(int)
 
+        # Tamaño (miembros simultáneos) registrado en cada frame: group_id -> [size, ...]
+        self.group_size_history = defaultdict(list)
+
         # Frame actual (se actualiza en cada llamada a update)
         self._current_frame = 0
 
@@ -178,6 +181,9 @@ class GroupTracker:
             # Registrar posición en historial
             self.group_centroid_history[gid].append((self._current_frame, cx, cy))
 
+            # Registrar tamaño real (miembros simultáneos) en este frame
+            self.group_size_history[gid].append(len(members))
+
             # Detectar pausa: comparar con posición anterior
             history = self.group_centroid_history[gid]
             if len(history) >= 2:
@@ -219,8 +225,9 @@ class GroupTracker:
             duration_seconds = duration_frames / fps
 
             # --- Cardinalidad ---
-            # Número máximo de miembros que tuvo el grupo (peak size)
-            cardinality = max(self.group_history[gid].values()) if self.group_history[gid] else 0
+            # Número máximo de miembros simultáneos que tuvo el grupo en un solo frame
+            size_history = self.group_size_history.get(gid, [])
+            cardinality = int(max(size_history)) if size_history else 0
 
             # --- Velocidades frame a frame ---
             velocities = []
@@ -676,7 +683,7 @@ def main():
     print(f" Pause threshold   : {args.pause_threshold} px/frame")
     print(f"{'='*60}\n")
 
-    model_path = "yolo11l.pt"
+    model_path = "yolo11x.pt"
 
     config = {
         'conf': args.conf,
