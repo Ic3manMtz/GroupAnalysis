@@ -742,7 +742,7 @@ def main():
     print(f" YOLO batch size   : {args.yolo_batch} frames")
     print(f"{'='*60}\n")
 
-    model_path = "yolo11x.pt"
+    model_path = "yolo11l.pt"
 
     config = {
         'conf': args.conf,
