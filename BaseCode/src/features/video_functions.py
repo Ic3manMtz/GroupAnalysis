@@ -253,7 +253,8 @@ class VideoFunctions:
         conf: float,
         group_dist: float,
         min_frames: int,
-        pause_threshold: float
+        pause_threshold: float,
+        yolo_batch: int = 8,
     ) -> None:
         """Ejecuta el pipeline concurrente completo (detección + grupos + reporte)"""
         print("\nIniciando pipeline concurrente...")
@@ -267,6 +268,7 @@ class VideoFunctions:
             "--group_dist",       str(group_dist),
             "--min_frames",       str(min_frames),
             "--pause_threshold",  str(pause_threshold),
+            "--yolo_batch",       str(yolo_batch),
         ])
 
     @staticmethod

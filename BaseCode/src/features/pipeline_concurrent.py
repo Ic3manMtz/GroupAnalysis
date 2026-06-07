@@ -360,94 +360,150 @@ def process_single_video(video_path, output_stats_dir, model_path, config):
         pause_threshold=config.get('pause_threshold', 2.0)
     )
 
-    # Bucle de procesamiento
-    frame_idx = 0
-    detections_batch = []
-    stats = {"groups": 0}
-    BATCH_SIZE = 50
+    # -----------------------------------------------------------------------
+    # Parámetros de lote
+    # -----------------------------------------------------------------------
+    # YOLO_BATCH: cuántos frames se envían juntos a la GPU en una sola llamada.
+    #   - Más alto = mejor utilización de GPU, pero más RAM de video usada.
+    #   - Con 16 GB VRAM, 8 es un buen punto de partida.
+    YOLO_BATCH = config.get('yolo_batch', 8)
 
+    # BATCH_SIZE: cuántos registros acumular antes de un commit a PostgreSQL.
+    #   - 500 reduce la frecuencia de transacciones ~10x vs el valor anterior (50).
+    BATCH_SIZE = 500
+
+    frame_idx     = 0
+    frame_buffer  = []   # frames acumulados para inferencia en lote
+    fidx_buffer   = []   # índices correspondientes a cada frame del buffer
+
+    detections_batch = []
+    groups_batch     = []   # GroupDetection pendientes de guardar
+    members_batch    = []   # lista de listas de track_ids por cada grupo
+
+    stats = {"groups": 0}
+
+    # ------------------------------------------------------------------
+    # Helper: guarda todos los lotes acumulados en un solo commit
+    # ------------------------------------------------------------------
+    def _flush_to_db():
+        if detections_batch:
+            db.bulk_save_objects(detections_batch)
+
+        if groups_batch:
+            db.bulk_save_objects(groups_batch)
+            db.flush()   # necesario para que ORM asigne IDs a los GroupDetection
+            for group_obj, members in zip(groups_batch, members_batch):
+                for mid in members:
+                    db.add(GroupMember(group_detection_id=group_obj.id, track_id=mid))
+
+        db.commit()
+        detections_batch.clear()
+        groups_batch.clear()
+        members_batch.clear()
+
+    # ------------------------------------------------------------------
+    # Helper: procesa los resultados YOLO de un lote de frames
+    # ------------------------------------------------------------------
+    def _process_batch(fidx_buf, frame_buf, yolo_results):
+        nonlocal frame_idx
+        for fidx, frame, result in zip(fidx_buf, frame_buf, yolo_results):
+            frame_idx = fidx
+
+            # Vectorizado: una sola transferencia CPU por frame (todas las cajas a la vez)
+            yolo_dets = []
+            if result.boxes is not None and len(result.boxes):
+                boxes_xyxy = result.boxes.xyxy.cpu().numpy()  # (N, 4)
+                confs      = result.boxes.conf.cpu().numpy()  # (N,)
+                for (x1, y1, x2, y2), conf_val in zip(boxes_xyxy, confs):
+                    yolo_dets.append(([int(x1), int(y1), int(x2 - x1), int(y2 - y1)],
+                                      float(conf_val), "person"))
+
+            # --- RASTREO ---
+            tracks = tracker.update_tracks(yolo_dets, frame=frame)
+
+            # Dict para lookup O(1) en el paso de grupos (evita scan lineal)
+            track_map = {}
+            for track in tracks:
+                if not track.is_confirmed():
+                    continue
+                tid = track.track_id
+                x1, y1, x2, y2 = track.to_ltrb()
+                detections_batch.append(FrameObjectDetection(
+                    video_id=video_record.video_id, frame_number=fidx, track_id=tid,
+                    x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2)
+                ))
+                track_map[tid] = (x1, y1, x2, y2)
+
+            # --- GRUPOS ---
+            if track_map:
+                frame_dets = [
+                    {'track_id': tid, 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2}
+                    for tid, (x1, y1, x2, y2) in track_map.items()
+                ]
+                groups_found = group_tracker.update(frame_dets, frame_idx=fidx)
+                stats["groups"] = len(groups_found)
+
+                for grp in groups_found:
+                    # Lookup O(1) con el dict
+                    centers = np.array([
+                        [(track_map[tid][0] + track_map[tid][2]) / 2,
+                         (track_map[tid][1] + track_map[tid][3]) / 2]
+                        for tid in grp['members'] if tid in track_map
+                    ])
+                    cx, cy, disp = 0.0, 0.0, 0.0
+                    if len(centers):
+                        cx  = float(np.mean(centers[:, 0]))
+                        cy  = float(np.mean(centers[:, 1]))
+                        disp = float(np.mean(np.linalg.norm(centers - [cx, cy], axis=1)))
+
+                    groups_batch.append(GroupDetection(
+                        video_id=video_record.video_id, frame_number=fidx,
+                        group_id=grp['group_id'], center_x=cx, center_y=cy,
+                        size=grp['size'], dispersion=disp, avg_velocity=0.0, velocity_std=0.0
+                    ))
+                    members_batch.append(grp['members'])
+
+            # Commit cuando se acumula suficiente trabajo
+            if len(detections_batch) + len(groups_batch) >= BATCH_SIZE:
+                _flush_to_db()
+
+            if fidx % 200 == 0:
+                safe_print(f"   [{video_name[:15]}] Frame {fidx} | Grupos activos: {stats['groups']}")
+
+    # ------------------------------------------------------------------
+    # Bucle principal — acumula frames y llama a YOLO en lotes
+    # ------------------------------------------------------------------
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
+                # Procesar el último lote (puede ser menor que YOLO_BATCH)
+                if frame_buffer:
+                    results = model.predict(
+                        frame_buffer, conf=config['conf'], classes=[0],
+                        verbose=False, device=device
+                    )
+                    _process_batch(fidx_buffer, frame_buffer, results)
+                    frame_buffer.clear()
+                    fidx_buffer.clear()
                 break
 
             frame_idx += 1
+            frame_buffer.append(frame)
+            fidx_buffer.append(frame_idx)
 
-            # --- DETECCIÓN ---
-            results = model.predict(frame, conf=config['conf'], classes=[0], verbose=False, device=device)
+            if len(frame_buffer) >= YOLO_BATCH:
+                results = model.predict(
+                    frame_buffer, conf=config['conf'], classes=[0],
+                    verbose=False, device=device
+                )
+                _process_batch(fidx_buffer, frame_buffer, results)
+                frame_buffer.clear()
+                fidx_buffer.clear()
 
-            yolo_dets = []
-            if results[0].boxes:
-                for box in results[0].boxes:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    conf_val = box.conf[0].cpu().item()
-                    w, h = x2 - x1, y2 - y1
-                    yolo_dets.append(([int(x1), int(y1), int(w), int(h)], conf_val, "person"))
-
-            # --- RASTREO ---
-            tracks = tracker.update_tracks(yolo_dets, frame=frame)
-            current_frame_tracks = []
-
-            for track in tracks:
-                if not track.is_confirmed():
-                    continue
-
-                track_id = track.track_id
-                x1, y1, x2, y2 = track.to_ltrb()
-
-                detections_batch.append(FrameObjectDetection(
-                    video_id=video_record.video_id, frame_number=frame_idx, track_id=track_id,
-                    x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2)
-                ))
-
-                current_frame_tracks.append({
-                    'track_id': track_id, 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2
-                })
-
-            # --- GRUPOS ---
-            if current_frame_tracks:
-                # Pasamos frame_idx para que el tracker registre tiempos exactos
-                groups_found = group_tracker.update(current_frame_tracks, frame_idx=frame_idx)
-                stats["groups"] = len(groups_found)
-
-                for grp in groups_found:
-                    centers = []
-                    for tid in grp['members']:
-                        t = next((t for t in current_frame_tracks if t['track_id'] == tid), None)
-                        if t:
-                            centers.append([(t['x1'] + t['x2']) / 2, (t['y1'] + t['y2']) / 2])
-
-                    cx, cy, disp = 0, 0, 0
-                    if centers:
-                        centers = np.array(centers)
-                        cx, cy = np.mean(centers, axis=0)
-                        disp = float(np.mean(np.linalg.norm(centers - np.array([cx, cy]), axis=1)))
-
-                    group_obj = GroupDetection(
-                        video_id=video_record.video_id, frame_number=frame_idx,
-                        group_id=grp['group_id'], center_x=float(cx), center_y=float(cy),
-                        size=grp['size'], dispersion=disp, avg_velocity=0.0, velocity_std=0.0
-                    )
-                    db.add(group_obj)
-                    db.flush()
-
-                    for mid in grp['members']:
-                        db.add(GroupMember(group_detection_id=group_obj.id, track_id=mid))
-
-            # --- BATCH SAVE ---
-            if len(detections_batch) >= BATCH_SIZE:
-                db.bulk_save_objects(detections_batch)
-                db.commit()
-                detections_batch = []
-
-            if frame_idx % 100 == 0:
-                safe_print(f"   [{video_name[:10]}...] Frame {frame_idx} | Grupos activos: {stats['groups']}")
-
-        # Commit final
-        if detections_batch:
-            db.bulk_save_objects(detections_batch)
-        db.commit()
+        # Commit final de lo que quedó en los buffers
+        if detections_batch or groups_batch:
+            _flush_to_db()
 
         # Calcular estadísticas de grupos en memoria y generar reporte
         group_stats = group_tracker.get_group_stats(fps=fps)
@@ -661,12 +717,14 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline Concurrente de Video Analítica")
     parser.add_argument("--input_dir", type=str, required=True, help="Carpeta con videos .mp4")
     parser.add_argument("--output_dir", type=str, default="reportes", help="Carpeta para reportes")
-    parser.add_argument("--max_workers", type=int, default=2, help="Número de videos simultáneos (Cuidado con VRAM)")
+    parser.add_argument("--max_workers", type=int, default=4, help="Número de videos simultáneos")
     parser.add_argument("--conf", type=float, default=0.25, help="Confianza YOLO")
     parser.add_argument("--group_dist", type=float, default=100.0)
     parser.add_argument("--min_frames", type=int, default=15)
     parser.add_argument("--pause_threshold", type=float, default=2.0,
                         help="Velocidad en px/frame por debajo de la cual se considera pausa (default: 2.0)")
+    parser.add_argument("--yolo_batch", type=int, default=8,
+                        help="Frames por lote de inferencia YOLO (default: 8). Aumentar si tienes VRAM disponible.")
 
     args = parser.parse_args()
 
@@ -681,6 +739,7 @@ def main():
     print(f" Hilos simultáneos : {args.max_workers}")
     print(f" GPU Disponible    : {torch.cuda.is_available()}")
     print(f" Pause threshold   : {args.pause_threshold} px/frame")
+    print(f" YOLO batch size   : {args.yolo_batch} frames")
     print(f"{'='*60}\n")
 
     model_path = "yolo11x.pt"
@@ -690,6 +749,7 @@ def main():
         'group_dist': args.group_dist,
         'min_frames': args.min_frames,
         'pause_threshold': args.pause_threshold,
+        'yolo_batch': args.yolo_batch,
     }
 
     start_time = time.time()

@@ -156,6 +156,7 @@ class Handler:
                     group_dist=params["group_dist"],
                     min_frames=params["min_frames"],
                     pause_threshold=params["pause_threshold"],
+                    yolo_batch=params["yolo_batch"],
                 )
                 end_time = time.time()
                 print(f"Pipeline completado en: {self.format_time(end_time - start_time)}")

@@ -161,12 +161,16 @@ class MainMenu:
         except ValueError:
             pause_threshold = 2.0
 
+        yolo_batch = input("  Frames por lote YOLO en GPU (default: 8): ").strip()
+        yolo_batch = int(yolo_batch) if yolo_batch.isdigit() else 8
+
         return {
             "max_workers":     max_workers,
             "conf":            conf,
             "group_dist":      group_dist,
             "min_frames":      min_frames,
             "pause_threshold": pause_threshold,
+            "yolo_batch":      yolo_batch,
         }
 
     @staticmethod
