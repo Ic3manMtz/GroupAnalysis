@@ -386,12 +386,19 @@ def process_single_video(video_path, output_stats_dir, model_path, config):
     # Helper: guarda todos los lotes acumulados en un solo commit
     # ------------------------------------------------------------------
     def _flush_to_db():
+        # FrameObjectDetection no tiene dependencias de FK hacia otros objetos
+        # nuevos, por lo que bulk_save_objects es seguro aquí.
         if detections_batch:
             db.bulk_save_objects(detections_batch)
 
         if groups_batch:
-            db.bulk_save_objects(groups_batch)
-            db.flush()   # necesario para que ORM asigne IDs a los GroupDetection
+            # bulk_save_objects bypasea el ORM y NO popula group_obj.id después
+            # de insertar, dejándolo en None. Usamos add() + flush() para que
+            # SQLAlchemy asigne los IDs correctamente antes de crear los miembros.
+            for group_obj in groups_batch:
+                db.add(group_obj)
+            db.flush()  # asigna IDs a todos los GroupDetection recién agregados
+
             for group_obj, members in zip(groups_batch, members_batch):
                 for mid in members:
                     db.add(GroupMember(group_detection_id=group_obj.id, track_id=mid))
