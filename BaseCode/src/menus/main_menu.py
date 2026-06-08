@@ -21,7 +21,8 @@ class MainMenu:
         ("5", "Visualización de grupos en videos"),
         ("6", "Visualización de videos con detecciones individuales"),
         ("7", "Pipeline concurrente completo (detección + grupos + reporte)"),
-        ("8", "Volver al menú principal")
+        ("8", "Consolidar reportes en reporte único"),
+        ("9", "Volver al menú principal")
     ]
 
     @staticmethod

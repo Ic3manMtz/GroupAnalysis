@@ -162,6 +162,13 @@ class Handler:
                 print(f"Pipeline completado en: {self.format_time(end_time - start_time)}")
 
             elif choice == '8':
+                print("\n=== CONSOLIDAR REPORTES ===")
+                reports_dir = os.path.join(self.output_folder, "reportes")
+                output_path = os.path.join(reports_dir, "CONSOLIDADO.txt")
+                VideoFunctions.consolidate_reports(reports_dir, output_path)
+                print(f"Reporte consolidado guardado en: {output_path}")
+
+            elif choice == '9':
                 print("Regresar al menu anterior")
                 break
             else:

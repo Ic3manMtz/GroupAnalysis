@@ -272,6 +272,17 @@ class VideoFunctions:
         ])
 
     @staticmethod
+    def consolidate_reports(reports_dir: str, output_path: str) -> None:
+        """Consolida todos los reportes .txt en un único reporte agregado"""
+        print("\nConsolidando reportes...")
+        subprocess.run([
+            "python",
+            "src/features/consolidate_reports.py",
+            "--reports_dir", reports_dir,
+            "--output",      output_path,
+        ])
+
+    @staticmethod
     def command_run() -> None:
         """Ejecuta el comando de la CLI para iniciar el procesamiento de videos."""
         subprocess.run([
