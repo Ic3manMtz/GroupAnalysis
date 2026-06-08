@@ -16,7 +16,7 @@ services:
               capabilities: [gpu]
     volumes:
       - ./:/app
-      - ../Videos:/app/Videos:cached
+      - ../../Videos:/app/Videos:cached
     working_dir: /app
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
